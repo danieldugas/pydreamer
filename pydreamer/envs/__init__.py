@@ -7,6 +7,28 @@ import numpy as np
 
 from .wrappers import *
 
+class RGBImgPartialObsWrapper(gym.core.ObservationWrapper):
+    """
+    Wrapper for compatibility with dreamer
+    """
+
+    def __init__(self, env):
+        super().__init__(env)
+
+        _H = 64
+        _W = 64
+
+        self.observation_space = gym.spaces.Dict({
+            'image': gym.spaces.Box(low=0, high=255, shape=(_H, _W, 3), dtype='uint8'),
+            'mission': gym.spaces.Box(low=-np.inf, high=np.inf, shape=(5,), dtype=np.float32)
+        })
+        self.obs_space = self.observation_space
+
+    def observation(self, obs):
+        return {
+            'mission': obs[1],
+            'image': obs[0]
+        }
 
 def create_env(env_id: str, no_terminal: bool, env_time_limit: int, env_action_repeat: int):
 
@@ -45,29 +67,11 @@ def create_env(env_id: str, no_terminal: bool, env_time_limit: int, env_action_r
 
     elif env_id == ("NavRep3DTrainEnv"):
         from navrep3d.navrep3dtrainenv import NavRep3DTrainEnvDiscrete
-        class RGBImgPartialObsWrapper(gym.core.ObservationWrapper):
-            """
-            Wrapper for compatibility with dreamer
-            """
-
-            def __init__(self, env):
-                super().__init__(env)
-
-                _H = 64
-                _W = 64
-
-                self.observation_space = gym.spaces.Dict({
-                    'image': gym.spaces.Box(low=0, high=255, shape=(_H, _W, 3), dtype='uint8'),
-                    'mission': gym.spaces.Box(low=-np.inf, high=np.inf, shape=(5,), dtype=np.float32)
-                })
-                self.obs_space = self.observation_space
-
-            def observation(self, obs):
-                return {
-                    'mission': obs[1],
-                    'image': obs[0]
-                }
         env = RGBImgPartialObsWrapper(NavRep3DTrainEnvDiscrete())
+
+    elif env_id == ("NavRep3DStaticASLEnv"):
+        from navrep3d.mlagents_gym_wrapper import NavRep3DStaticASLEnvDiscrete
+        env = RGBImgPartialObsWrapper(NavRep3DStaticASLEnvDiscrete())
 
     else:
         env = gym.make(env_id)
