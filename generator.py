@@ -252,6 +252,7 @@ def main(env_id='MiniGrid-MazeS11N-v0',
                     pass
                 repo.save_data(data, episodes - datas_episodes, episodes - 1, i)
 
+    env.close()
     info('Generator done.')
 
 
