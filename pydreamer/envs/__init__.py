@@ -67,7 +67,7 @@ def create_env(env_id: str, no_terminal: bool, env_time_limit: int, env_action_r
 
     elif env_id == ("NavRep3DTrainEnv"):
         from navrep3d.navrep3dtrainenv import NavRep3DTrainEnvDiscrete
-        env = RGBImgPartialObsWrapper(NavRep3DTrainEnvDiscrete())
+        env = RGBImgPartialObsWrapper(NavRep3DTrainEnvDiscrete(build_name="./alternate.x86_64"))
 
     elif env_id == ("NavRep3DStaticASLEnv"):
         from navrep3d.mlagents_gym_wrapper import NavRep3DStaticASLEnvDiscrete

@@ -204,19 +204,23 @@ debug:
 navrep3dtrain:
   n_steps: 99_000_000
   n_env_steps: 200_000_000
+  buffer_size: 10_000_000
   # Env
   env_id: NavRep3DTrainEnv
   action_dim: 3
   env_time_limit: 27_000  # =108_000/action_repeat = 30 minutes of game play.
-  generator_workers: 2
+  generator_workers: 1
   generator_prefill_steps: 50_000
+  data_workers: 1
 
 navrep3dstaticasl:
+  buffer_size: 10_000_000 # only affects disk space, not RAM
   n_steps: 99_000_000
   n_env_steps: 200_000_000
   # Env
   env_id: NavRep3DStaticASLEnv
   action_dim: 3
   env_time_limit: 27_000  # =108_000/action_repeat = 30 minutes of game play.
-  generator_workers: 2
+  generator_workers: 1 # RAM critical
   generator_prefill_steps: 50_000
+  data_workers: 1 # RAM critical
