@@ -208,7 +208,7 @@ navrep3dtrain:
   env_id: NavRep3DTrainEnv
   action_dim: 3
   env_time_limit: 27_000  # =108_000/action_repeat = 30 minutes of game play.
-  generator_workers: 4
+  generator_workers: 2
   generator_prefill_steps: 50_000
 
 navrep3dstaticasl:
@@ -218,5 +218,5 @@ navrep3dstaticasl:
   env_id: NavRep3DStaticASLEnv
   action_dim: 3
   env_time_limit: 27_000  # =108_000/action_repeat = 30 minutes of game play.
-  generator_workers: 4
+  generator_workers: 2
   generator_prefill_steps: 50_000
