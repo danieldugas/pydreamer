@@ -104,7 +104,7 @@ def mlflow_save_checkpoint(model, optimizers, steps):
         mlflow.log_artifact(str(path), artifact_path='checkpoints')
 
 
-def mlflow_load_checkpoint(model, optimizers=tuple(), artifact_path='checkpoints/latest.pt', map_location=None):
+def mlflow_load_checkpoint(model, optimizers=tuple(), artifact_path='checkpoints/latest.pt', map_location=None, retries=10):
     import mlflow
     from mlflow.tracking.client import MlflowClient
     import torch
@@ -116,7 +116,17 @@ def mlflow_load_checkpoint(model, optimizers=tuple(), artifact_path='checkpoints
         except Exception as e:  # TODO: check if it's an error instead of expected "not found"
             # Checkpoint not found
             return None
-        checkpoint = torch.load(path, map_location=map_location)
+        try:
+            checkpoint = torch.load(path, map_location=map_location)
+        except RuntimeError as e:
+            # can happen if we load while another process is writing
+            if retries == 0:
+                raise e
+            info(f'Failed to load checkpoint {path}. Is it corrupted? Retrying')
+            time.sleep(3.)
+            return mlflow_load_checkpoint(model, optimizers=optimizers,
+                                          artifact_path=artifact_path, map_location=map_location,
+                                          retries=retries-1)
         model.load_state_dict(checkpoint['model_state_dict'])
         for i, opt in enumerate(optimizers):
             opt.load_state_dict(checkpoint[f'optimizer_{i}_state_dict'])
