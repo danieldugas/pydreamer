@@ -42,16 +42,17 @@ def make_gif(env_name, run_id, step, fps=FPS):
     artifact = f'd2_wm_dream/{step}.npz'
     data = download_artifact_npz(run_id, artifact)
     img = data['image_pred']
-    print(img.shape)
     img = img[:B, :T].reshape((-1, 64, 64, 3))
     gif = encode_gif(img, fps)
     with Path(dest_path).open('wb') as f:
         f.write(gif)
+    print(dest_path)
+    print(img.shape)
 
 
 if __name__ == "__main__":
-    make_gif('navrep3dtrain', '3084dffbf1d44c0ba5e00edc12ef7876', '0011001')
-    make_gif('navrep3dtrain', '3084dffbf1d44c0ba5e00edc12ef7876', '0012001')
-    make_gif('navrep3dtrain', '3084dffbf1d44c0ba5e00edc12ef7876', '0013001')
-    make_gif('navrep3dtrain', '3084dffbf1d44c0ba5e00edc12ef7876', '0014001')
-    make_gif('navrep3dtrain', '3084dffbf1d44c0ba5e00edc12ef7876', '0015001')
+    for i in range(100)[::-1]:
+        try:
+            make_gif('navrep3dtrain', '15a44ae71c9b4fcfb862eeb7c05a46b2', "{:04}".format(i) + '001')
+        except Exception as e:
+            print(e)
