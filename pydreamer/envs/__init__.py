@@ -7,7 +7,7 @@ import numpy as np
 
 from .wrappers import *
 
-class RGBImgPartialObsWrapper(gym.core.ObservationWrapper):
+class DictWrapper(gym.core.ObservationWrapper):
     """
     Wrapper for compatibility with dreamer
     """
@@ -20,13 +20,13 @@ class RGBImgPartialObsWrapper(gym.core.ObservationWrapper):
 
         self.observation_space = gym.spaces.Dict({
             'image': gym.spaces.Box(low=0, high=255, shape=(_H, _W, 3), dtype='uint8'),
-            'mission': gym.spaces.Box(low=-np.inf, high=np.inf, shape=(5,), dtype=np.float32)
+            'vecobs': gym.spaces.Box(low=-np.inf, high=np.inf, shape=(5,), dtype=np.float32)
         })
         self.obs_space = self.observation_space
 
     def observation(self, obs):
         return {
-            'mission': obs[1],
+            'vecobs': obs[1],
             'image': obs[0]
         }
 
@@ -67,11 +67,11 @@ def create_env(env_id: str, no_terminal: bool, env_time_limit: int, env_action_r
 
     elif env_id == ("NavRep3DTrainEnv"):
         from navrep3d.navrep3dtrainenv import NavRep3DTrainEnvDiscrete
-        env = RGBImgPartialObsWrapper(NavRep3DTrainEnvDiscrete(build_name="./alternate.x86_64"))
+        env = DictWrapper(NavRep3DTrainEnvDiscrete(build_name="./alternate.x86_64"))
 
     elif env_id == ("NavRep3DStaticASLEnv"):
         from navrep3d.mlagents_gym_wrapper import NavRep3DStaticASLEnvDiscrete
-        env = RGBImgPartialObsWrapper(NavRep3DStaticASLEnvDiscrete())
+        env = DictWrapper(NavRep3DStaticASLEnvDiscrete())
 
     else:
         env = gym.make(env_id)
