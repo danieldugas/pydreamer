@@ -26,7 +26,7 @@ class MultiEncoder(nn.Module):
                                               hidden_layers=conf.image_encoder_layers,
                                               layer_norm=conf.layer_norm)
 
-        self.encoder_vecobs = MLP(64, 256, hidden_dim=400, hidden_layers=2, layer_norm=conf.layer_norm)
+        self.encoder_vecobs = MLP(conf.vecobs_size, 256, hidden_dim=400, hidden_layers=2, layer_norm=conf.layer_norm)
         self.out_dim = self.encoder_image.out_dim + self.encoder_vecobs.out_dim
 
     def forward(self, obs: Dict[str, Tensor]) -> TensorTBE:

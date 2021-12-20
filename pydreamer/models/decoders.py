@@ -35,7 +35,7 @@ class MultiDecoder(nn.Module):
         else:
             self.reward = DenseNormalDecoder(in_dim=features_dim, hidden_layers=conf.reward_decoder_layers, layer_norm=conf.layer_norm)
         self.terminal = DenseBernoulliDecoder(in_dim=features_dim, hidden_layers=conf.terminal_decoder_layers, layer_norm=conf.layer_norm)
-        self.vecobs = DenseNormalDecoder(in_dim=features_dim, out_dim=64, hidden_layers=4, layer_norm=conf.layer_norm)
+        self.vecobs = DenseNormalDecoder(in_dim=features_dim, out_dim=conf.vecobs_size, hidden_layers=4, layer_norm=conf.layer_norm)
 
     def training_step(self,
                       features: TensorTBIF,
