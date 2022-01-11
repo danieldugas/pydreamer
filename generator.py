@@ -148,6 +148,8 @@ def main(env_id='MiniGrid-MazeS11N-v0',
             for k, v in mets.items():
                 metrics[k].append(v)
 
+        episode_scenario = inf["episode_scenario"] # N3D only! Breaks compatibility with non-N3D envs
+
         episodes += 1
         data = inf['episode']  # type: ignore
         if 'policy_value' in metrics:
@@ -173,6 +175,7 @@ def main(env_id='MiniGrid-MazeS11N-v0',
              f",  total steps: {steps:.0f}"
              f",  episodes: {episodes}"
              f",  fps: {fps:.0f}"
+             f",  scenario: {episode_scenario}"
              )
 
         if log_mlflow_metrics:
@@ -186,6 +189,7 @@ def main(env_id='MiniGrid-MazeS11N-v0',
                 f'{metrics_prefix}/episodes': episodes,
                 f'{metrics_prefix}/return': data['reward'].sum(),
                 f'{metrics_prefix}/return_cum': np.mean(all_returns[-100:]),
+                f"{metrics_prefix}/scenario": episode_scenario,
             })  # type: ignore
 
             # Calculate return_discounted

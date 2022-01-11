@@ -118,7 +118,7 @@ def mlflow_load_checkpoint(model, optimizers=tuple(), artifact_path='checkpoints
             return None
         try:
             checkpoint = torch.load(path, map_location=map_location)
-        except RuntimeError as e:
+        except (RuntimeError, EOFError) as e:
             # can happen if we load while another process is writing
             if retries == 0:
                 raise e

@@ -51,8 +51,8 @@ def make_gif(env_name, run_id, step, fps=FPS):
 
 
 if __name__ == "__main__":
-    for i in range(100)[::-1]:
+    for i in range(1000)[::-1]:
         try:
-            make_gif('navrep3dtrain', '15a44ae71c9b4fcfb862eeb7c05a46b2', "{:04}".format(i) + '001')
+            make_gif('navrep3dtrain', '31a69ce4ed134652a2cf9320038125e2', "{:04}".format(i) + '001')
         except Exception as e:
             print(e)

@@ -216,6 +216,7 @@ navrep3dtrain:
 
 navrep3dstaticasl:
   buffer_size: 10_000_000 # only affects disk space, not RAM
+  vecobs_size: 5
   n_steps: 99_000_000
   n_env_steps: 200_000_000
   # Env
