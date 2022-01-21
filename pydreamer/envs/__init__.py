@@ -73,6 +73,10 @@ def create_env(env_id: str, no_terminal: bool, env_time_limit: int, env_action_r
         from navrep3d.mlagents_gym_wrapper import NavRep3DStaticASLEnvDiscrete
         env = DictWrapper(NavRep3DStaticASLEnvDiscrete())
 
+    elif env_id == ("NavRep3DKozeHDEnv"):
+        from navrep3d.mlagents_gym_wrapper import NavRep3DStaticASLEnvDiscrete
+        env = DictWrapper(NavRep3DStaticASLEnvDiscrete(build_name="kozehd"))
+
     else:
         env = gym.make(env_id)
         env = DictWrapper(env)

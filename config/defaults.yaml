@@ -226,3 +226,16 @@ navrep3dstaticasl:
   generator_workers: 1 # RAM critical
   generator_prefill_steps: 50_000
   data_workers: 1 # RAM critical
+
+navrep3dkozehd:
+  buffer_size: 10_000_000 # only affects disk space, not RAM
+  vecobs_size: 5
+  n_steps: 99_000_000
+  n_env_steps: 200_000_000
+  # Env
+  env_id: NavRep3DKozeHDEnv
+  action_dim: 3
+  env_time_limit: 27_000  # =108_000/action_repeat = 30 minutes of game play.
+  generator_workers: 1 # RAM critical
+  generator_prefill_steps: 50_000
+  data_workers: 1 # RAM critical
