@@ -4,13 +4,8 @@ import numpy as np
 import pandas as pd
 from strictfire import StrictFire
 
-def main(envname="navrep3daslfixedenv",
-         scenario="navrep3dasl",
-         mlruns_dir="~/aws_mlruns/mlruns",
+def main(mlruns_dir="~/aws_mlruns/mlruns",
          ):
-    print("")
-    print("ASSUMING SCENARIO IS {}".format(scenario))
-    print("")
 
     mlruns_dir = os.path.expanduser(mlruns_dir)
     runs_parent = os.path.join(mlruns_dir, "0")
@@ -29,8 +24,6 @@ def main(envname="navrep3daslfixedenv",
     for run in runs:
         print(run)
 
-    time.sleep(5.)
-
     for run in runs:
         rundir = os.path.join(runs_parent, run)
         if not os.path.isdir(rundir):
@@ -39,7 +32,19 @@ def main(envname="navrep3daslfixedenv",
         print("Reading {}".format(logpath))
         S = pd.read_csv(logpath, sep=" ", names=["wall_time", "num_walls", "total_steps"])
 
-        outpath = os.path.expanduser("~/navrep3d/logs/gym/navrep3daslfixedenv_2022_01_01__01_01_01_DISCRETE_DREAMER_E2E_VCARCH_C1024.csv") # noqa
+        # read environment
+        envidpath = os.path.join(rundir, "params/env_id")
+        env_id_df = pd.read_csv(envidpath)
+        env_id = env_id_df.columns[0]
+        if env_id == "NavRep3DStaticASLEnv":
+            envname="navrep3daslfixedenv"
+            scenario="navrep3dasl"
+        elif env_id == "NavRep3DKozeHDEnv":
+            envname="navrep3dkozehdrenv"
+            scenario="navrep3dkozehd"
+        else:
+            raise NotImplementedError
+
 
         S = pd.read_csv(logpath, sep=" ", names=["wall_time", "num_walls", "total_steps"])
         S["scenario"] = scenario
@@ -64,7 +69,10 @@ def main(envname="navrep3daslfixedenv",
         # fix log start time
         start_time = S["wall_time"][0]
         time_string = time.strftime('%Y_%m_%d__%H_%M_%S', time.localtime(start_time))
-        outpath = outpath.replace("2022_01_01__01_01_01", time_string)
+        outpath = "~/navrep3d/logs/gym/{}_{}_DISCRETE_DREAMER_E2E_VCARCH_C1024.csv".format(
+            envname, time_string
+        )
+        outpath = os.path.expanduser(outpath)
 
         S.to_csv(outpath)
         print("{} written.".format(outpath))
