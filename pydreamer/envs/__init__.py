@@ -77,6 +77,10 @@ def create_env(env_id: str, no_terminal: bool, env_time_limit: int, env_action_r
         from navrep3d.mlagents_gym_wrapper import NavRep3DStaticASLEnvDiscrete
         env = DictWrapper(NavRep3DStaticASLEnvDiscrete(build_name="kozehd"))
 
+    elif env_id == ("NavRep3DAlternate"):
+        from navrep3d.navrep3dtrainenv import NavRep3DTrainEnvDiscrete
+        env = DictWrapper(NavRep3DTrainEnvDiscrete(build_name="./alternate.x86_64"))
+
     else:
         env = gym.make(env_id)
         env = DictWrapper(env)
