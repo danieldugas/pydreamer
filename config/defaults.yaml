@@ -233,7 +233,7 @@ navrep3dkozehd:
   n_steps: 99_000_000
   n_env_steps: 200_000_000
   # Env
-  env_id: NavRep3DKozeHDEnv
+  env_id: NavRep3DKozeHDRSEnv
   action_dim: 3
   env_time_limit: 27_000  # =108_000/action_repeat = 30 minutes of game play.
   generator_workers: 1 # RAM critical
