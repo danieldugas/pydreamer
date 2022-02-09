@@ -42,6 +42,9 @@ def main(mlruns_dir="~/aws_mlruns/mlruns",
         elif env_id == "NavRep3DKozeHDEnv":
             envname="navrep3dkozehdrenv"
             scenario="navrep3dkozehd"
+        elif env_id == "NavRep3DTrainEnv":
+            envname="navrep3daltenv"
+            scenario="navrep3dalt"
         else:
             raise NotImplementedError
 
