@@ -5,6 +5,7 @@ import pandas as pd
 from strictfire import StrictFire
 
 def main(mlruns_dir="~/aws_mlruns/mlruns",
+         dry_run=False,
          ):
 
     mlruns_dir = os.path.expanduser(mlruns_dir)
@@ -82,8 +83,9 @@ def main(mlruns_dir="~/aws_mlruns/mlruns",
         )
         outpath = os.path.expanduser(outpath)
 
-        S.to_csv(outpath)
-        print("{} written.".format(outpath))
+        if not dry_run:
+            S.to_csv(outpath)
+        print("{} {} written.".format(outpath, "would have been" if dry_run else ""))
 
 
 if __name__ == "__main__":

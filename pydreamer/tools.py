@@ -1,6 +1,7 @@
 import io
 import logging
 import os
+import traceback
 import posixpath
 import sys
 import tempfile
@@ -12,6 +13,8 @@ from typing import Any, Dict, Tuple, Union
 
 import numpy as np
 import yaml
+
+# ipython -i -- test.py --configs defaults navrep3dtrain --device cpu
 
 try:
     from mlflow.store.artifact.artifact_repo import ArtifactRepository
@@ -104,21 +107,25 @@ def mlflow_save_checkpoint(model, optimizers, steps):
         mlflow.log_artifact(str(path), artifact_path='checkpoints')
 
 
-def mlflow_load_checkpoint(model, optimizers=tuple(), artifact_path='checkpoints/latest.pt', map_location=None, retries=10):
+def mlflow_load_checkpoint(model, optimizers=tuple(), artifact_path='checkpoints/latest.pt', map_location=None, retries=10, run_id=None):
     import mlflow
     from mlflow.tracking.client import MlflowClient
     import torch
     with tempfile.TemporaryDirectory() as tmpdir:
         client = MlflowClient()
-        run_id = mlflow.active_run().info.run_id  # type: ignore
-        try:
+        if run_id is None:
+            run_id = mlflow.active_run().info.run_id  # type: ignore
+            try:
+                path = client.download_artifacts(run_id, artifact_path, tmpdir)
+            except Exception as e:  # TODO: check if it's an error instead of expected "not found"
+                # Checkpoint not found
+                return None
+        else:
             path = client.download_artifacts(run_id, artifact_path, tmpdir)
-        except Exception as e:  # TODO: check if it's an error instead of expected "not found"
-            # Checkpoint not found
-            return None
         try:
             checkpoint = torch.load(path, map_location=map_location)
         except (RuntimeError, EOFError) as e:
+            traceback.print_exc()
             # can happen if we load while another process is writing
             if retries == 0:
                 raise e
@@ -126,6 +133,7 @@ def mlflow_load_checkpoint(model, optimizers=tuple(), artifact_path='checkpoints
             time.sleep(3.)
             return mlflow_load_checkpoint(model, optimizers=optimizers,
                                           artifact_path=artifact_path, map_location=map_location,
+                                          run_id=run_id,
                                           retries=retries-1)
         model.load_state_dict(checkpoint['model_state_dict'])
         for i, opt in enumerate(optimizers):
