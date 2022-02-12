@@ -42,6 +42,9 @@ def main(mlruns_dir="~/aws_mlruns/mlruns",
         elif env_id == "NavRep3DKozeHDEnv":
             envname="navrep3dkozehdrenv"
             scenario="navrep3dkozehd"
+        elif env_id == "NavRep3DKozeHDRSEnv":
+            envname="navrep3dkozehdrsenv"
+            scenario="navrep3dkozehd"
         elif env_id == "NavRep3DTrainEnv":
             envname="navrep3daltenv"
             scenario="navrep3dalt"
@@ -56,6 +59,8 @@ def main(mlruns_dir="~/aws_mlruns/mlruns",
         S["goal_reached"] = np.nan
         S["reward"] = np.nan
         S["num_agents"] = S["num_walls"]
+        if env_id == "NavRep3DTrainEnv":
+            S["num_walls"] = S["num_agents"] * 2. - 2.
 
         # post-processing
         S["wall_time"] = S["wall_time"] / 1000.
