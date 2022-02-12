@@ -4,6 +4,7 @@ import logging.config
 import os
 import sys
 import time
+from tqdm import tqdm
 from collections import defaultdict
 from datetime import datetime
 from itertools import chain
@@ -65,9 +66,10 @@ def run(conf):
     print(conf.resume_id)
     run_id = conf.resume_id
     if conf.resume_id is None:
-#         run_id = "064ef75a6d424c719a0cda6619782ff1"
-#         run_id = "f3f47a18b9334a4baa97c728143a00c6"
-        run_id = "0657e4d7a0f14c6ea301017f6774402b"
+#         run_id = "f3f47a18b9334a4baa97c728143a00c6" # "./alternate.x86_64"
+#         run_id = "0657e4d7a0f14c6ea301017f6774402b" # "./alternate.x86_64"
+#         run_id = "a1ec5269279f46f79af2884526590592" # "staticasl" (fixed)
+        run_id = "3aaa8d09bce64dd888240a04b714aec7" # "kozehd" (kozehdrs)
     print("run_id: " + run_id)
 
     optimizers = model.init_optimizers(conf.adam_lr, conf.adam_lr_actor, conf.adam_lr_critic, conf.adam_eps)
@@ -76,8 +78,10 @@ def run(conf):
 
     last_action = np.array([1, 0, 0])
 
-    build_name = "./alternate.x86_64"
-    difficulty_mode = "progressive"
+#     build_name = "./alternate.x86_64"
+    build_name = "kozehd"
+#     difficulty_mode = "progressive"
+    difficulty_mode = "easiest"
     env = NavRep3DAnyEnvDiscrete(build_name=build_name,
                                  debug_export_every_n_episodes=0,
                                  difficulty_mode=difficulty_mode)
@@ -89,8 +93,12 @@ def run(conf):
     V = 5
     T = 1
     B = 1
-    for i in range(10):
 
+    render = True
+    successes = []
+    N = 1000
+    pbar = tqdm(range(N))
+    for i in pbar:
         (img, vecobs) = env.reset() # ((64, 64, 3) [0-255], (5,) [-inf, inf])
         rnn_state = model.init_state(B)
         while True:
@@ -109,15 +117,21 @@ def run(conf):
             deter_action = np.argmax(action_distr.sample().view((A,)).detach().numpy())
             last_action[:] = 0
             last_action[deter_action] = 1
-            print(last_action)
 
             (img, vecobs), reward, done, inf = env.step(deter_action)
 
-            env.render()
+            if render:
+                env.render(save_to_file=True)
             if done:
-                print("Done")
-                print(reward)
-                print(inf)
+                if reward > 50.:
+                    if render:
+                        print("Success!")
+                    successes.append(1.)
+                else:
+                    if render:
+                        print("Failure.")
+                    successes.append(0.)
+                pbar.set_description(f"Success rate: {sum(successes)/len(successes):.2f}")
                 break
 
 
