@@ -27,7 +27,7 @@ class RSSMCore(nn.Module):
                 do_open_loop=False,
                 ):
 
-        T, B = embed.shape[:2]
+        T, B = action.shape[:2]
         I = iwae_samples
 
         # Multiply batch dimension by I samples
@@ -36,7 +36,8 @@ class RSSMCore(nn.Module):
             # (T,B,X) -> (T,BI,X)
             return x.unsqueeze(2).expand(T, B, I, -1).reshape(T, B * I, -1)
 
-        embeds = expand(embed).unbind(0)     # (T,B,...) => List[(BI,...)]
+        if not do_open_loop:
+            embeds = expand(embed).unbind(0)     # (T,B,...) => List[(BI,...)]
         actions = expand(action).unbind(0)
         reset_masks = expand(~reset.unsqueeze(2)).unbind(0)
 
