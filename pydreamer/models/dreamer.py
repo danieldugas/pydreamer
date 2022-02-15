@@ -144,10 +144,13 @@ class Dreamer(nn.Module):
                 actions_dream.append(act)
                 rewards_dream.append(rew)
                 terminals_dream.append(term)
-            features_dream = torch.stack(features_dream, dim=1)  # (H+1,TBI,D)
-            actions_dream = torch.stack(actions_dream, dim=1)  # (H+1,TBI,A)
-            rewards_dream = torch.stack(rewards_dream, dim=1)  # (H+1,TBI)
-            terminals_dream = torch.stack(terminals_dream, dim=1)  # (H+1,TBI)
+            features_dream = torch.cat(features_dream, dim=1)  # (H+1,TBI,D)
+            actions_dream = torch.cat(actions_dream, dim=1)  # (H+1,TBI,A)
+            # we can't easily concat distributions, so we just recompute them
+            self.wm.requires_grad_(False)  # Prevent dynamics gradiens from affecting world model
+            rewards_dream = self.wm.decoder.reward.forward(features_dream)      # (H+1,TBI)
+            terminals_dream = self.wm.decoder.terminal.forward(features_dream)  # (H+1,TBI)
+            self.wm.requires_grad_(True)
         else:
             in_state_dream: StateB = map_structure(states, lambda x: flatten_batch(x.detach())[0])  # type: ignore  # (T,B,I) => (TBI)
             # Note features_dream includes the starting "real" features at features_dream[0]

@@ -75,7 +75,7 @@ class TSSMCore(nn.Module):
         S = self.config.prior_size
         context_embed, context_action, context_reset, _ = in_state
         if reset is None:
-            reset = torch.zeros((B,))
+            reset = torch.zeros((B,), device=action.device)
         zeroth_deter_state = torch.zeros((1, B, D), device=action.device)
         Co, B, E = context_embed.shape
         if Co > self.config.block_size:
@@ -83,6 +83,7 @@ class TSSMCore(nn.Module):
             context_embed = context_embed[-self.config.block_size:, :, :]
             context_action = context_action[-self.config.block_size:, :, :]
             context_reset = context_reset[-self.config.block_size:, :]
+            Co, B, E = context_embed.shape
 
         position_embeddings = self.pos_emb[:, :Co, :]  # each position maps to a (learnable) vector
         # forward the GPT model
@@ -90,7 +91,7 @@ class TSSMCore(nn.Module):
             self.embed_to_deter(context_embed.moveaxis(0, 1).reshape(B * Co, E)).reshape(B, Co, D)
             + position_embeddings
         ) # B, Co, D
-        x = self.blocks(full_embeddings)
+        x = self.blocks(full_embeddings.float())
         next_deterministic_states = self.ln_f(x).moveaxis(0, 1) # (Co, B, D)
         deterministic_states = torch.cat((zeroth_deter_state, # in case Co is []
                                           next_deterministic_states[:-1]), 0) # (Co, B, D)
@@ -216,7 +217,7 @@ class TSSMCore(nn.Module):
             # We want rec_embed to be the "same" as embed.
             # Could do this with a loss, but loss is defined outside.
             # so we sometimes just pass the original embeddings straight through
-            rec_embed = torch.where(torch.rand(embed.shape) > 0.5, embed, rec_embed)
+            rec_embed = torch.where(torch.rand(embed.shape, device=action.device) > 0.5, embed, rec_embed)
 
         states = []
         for i in range(T):
@@ -241,8 +242,7 @@ class TSSMCore(nn.Module):
             assert e.shape[:3] == a.shape[:3] and a.shape[:3] == r.shape[:3]
             assert e.shape[1:3] == z.shape[:2]
 
-        (e, a, r, z) = states[-1]
-        out_state = (e[:,:,0,:], a[:,:,0,:], r[:,:,0,:], z[:,0,:]) # remove I dim
+        out_state = self.last_state(states) # ((T, B, E), (T, B, A), (T, B, 1), (B, D))
 
         return (
             priors,                      # tensor(T,B,I,2S)
@@ -254,14 +254,15 @@ class TSSMCore(nn.Module):
         )
 
     def init_state(self, batch_size):
+        device = next(self.parameters()).device
         B = batch_size
         E = self.config.embed_dim
         A = self.config.action_dim
         D = self.config.deter_dim
-        uptonow_embed = torch.zeros((0, B, E))
-        uptonow_action = torch.zeros((0, B, A))
-        uptonow_reset = torch.zeros((0, B, 1))
-        last_deterministic_state = torch.zeros((B, D))
+        uptonow_embed = torch.zeros((0, B, E), device=device)
+        uptonow_action = torch.zeros((0, B, A), device=device)
+        uptonow_reset = torch.zeros((0, B, 1), device=device)
+        last_deterministic_state = torch.zeros((B, D), device=device)
         out_state = (uptonow_embed, uptonow_action, uptonow_reset, last_deterministic_state)
         return out_state
 
@@ -269,8 +270,8 @@ class TSSMCore(nn.Module):
         deterministic_states = []
         for _, _, _, deterministic_state in states:
             deterministic_states.append(deterministic_state)
-        deter = torch.stack(deterministic_states) # (T, B, D)
-        T, B, D = deter.shape
+        deter = torch.stack(deterministic_states) # (T, B, I, D)
+        T, B, Iw, D = deter.shape
         return deter
 
     def state_to_feature(self, state: Tuple[Tensor, Tensor, Tensor, Tensor]) -> Tensor:
@@ -299,7 +300,12 @@ class TSSMCore(nn.Module):
         return rec_embed # (P, B, E) or (B, E)
 
     def first_state(self, states: list) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
-        return states[0]
+        (e, a, r, z) = states[0]
+        return (e[:,:,0,:], a[:,:,0,:], r[:,:,0,:], z[:,0,:]) # remove I dim
+
+    def last_state(self, states: list) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
+        (e, a, r, z) = states[-1]
+        return (e[:,:,0,:], a[:,:,0,:], r[:,:,0,:], z[:,0,:]) # remove I dim
 
     def feature_replace_z(self, features: Tensor, z: Tensor):
         raise NotImplementedError
@@ -319,39 +325,13 @@ class TSSMCore(nn.Module):
 
 if __name__ == '__main__':
     import argparse
-    import logging
-    import logging.config
-    import os
-    import sys
-    import time
-    from collections import defaultdict
-    from datetime import datetime
-    from itertools import chain
-    from logging import critical, debug, error, info, warning
-    from multiprocessing import Process
-    from pathlib import Path
-    from typing import Iterator, Optional
 
-    import mlflow
-    import numpy as np
-    import scipy.special
-    import torch
-    import torch.distributions as D
     import torch.nn as nn
-    from torch import Tensor, tensor
-    from torch.cuda.amp import GradScaler, autocast
-    from torch.profiler import ProfilerActivity
-    from torch.utils.data import DataLoader
 
-    import generator
     from pydreamer import tools
-    from pydreamer.data import DataSequential, MlflowEpisodeRepository
-    from pydreamer.models import *
-    from pydreamer.models.functions import map_structure, nanmean
-    from pydreamer.preprocessing import Preprocessor, WorkerInfoPreprocess
-    from pydreamer.tools import *
+    from pydreamer.models.dreamer import Dreamer
 
-    configure_logging(prefix='[TRAIN]')
+    tools.configure_logging(prefix='[TRAIN]')
     parser = argparse.ArgumentParser()
     parser.add_argument('--configs', nargs='+', required=True)
     args, remaining = parser.parse_known_args()
@@ -383,20 +363,21 @@ if __name__ == '__main__':
     print(model)
 
     obs = {}
-    obs["action"] = torch.rand(conf.batch_length, conf.batch_size, conf.action_dim)
-    obs["reset"] = torch.zeros(conf.batch_length, conf.batch_size) > 0
-    obs["terminal"] = torch.zeros(conf.batch_length, conf.batch_size)
+    obs["action"] = torch.rand(conf.batch_length, conf.batch_size, conf.action_dim, device=device)
+    obs["reset"] = torch.zeros(conf.batch_length, conf.batch_size, device=device) > 0
+    obs["terminal"] = torch.zeros(conf.batch_length, conf.batch_size, device=device)
     obs["image"] = torch.rand(conf.batch_length, conf.batch_size,
-                              conf.image_channels, conf.image_size, conf.image_size)
-    obs["vecobs"] = torch.rand(conf.batch_length, conf.batch_size, conf.vecobs_size)
-    obs["reward"] = torch.rand(conf.batch_length, conf.batch_size)
+                              conf.image_channels, conf.image_size, conf.image_size, device=device)
+    obs["vecobs"] = torch.rand(conf.batch_length, conf.batch_size, conf.vecobs_size, device=device)
+    obs["reward"] = torch.rand(conf.batch_length, conf.batch_size, device=device)
     state = model.init_state(conf.batch_size * conf.iwae_samples)
-    model.training_step(obs,
-                        state,
-                        iwae_samples=conf.iwae_samples,
-                        imag_horizon=conf.imag_horizon,
-                        do_image_pred=False,
-                        do_dream_tensors=False)
+    losses, new_state, loss_metrics, tensors, dream_tensors = \
+        model.training_step(obs,
+                            state,
+                            iwae_samples=conf.iwae_samples,
+                            imag_horizon=conf.imag_horizon,
+                            do_image_pred=False,
+                            do_dream_tensors=False)
     model.training_step(obs,
                         state,
                         iwae_samples=conf.iwae_samples,

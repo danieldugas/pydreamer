@@ -606,4 +606,6 @@ if __name__ == '__main__':
         parser.add_argument(f'--{key}', type=type(value) if value is not None else str, default=value)
     conf = parser.parse_args(remaining)
 
+    print(conf)
+
     run(conf)
