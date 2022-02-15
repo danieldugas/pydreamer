@@ -13,10 +13,13 @@ DEBUG = True
 
 class TransfConfig:
     block_size = 64
+    n_embd = 1536
+
     embd_pdrop = 0.1
     resid_pdrop = 0.1
-    transf_layers = 2
-    n_embd = 1536
+    attn_pdrop = 0.1
+    n_layer = 8
+    n_head = 8
 
 class TSSMCore(nn.Module):
 
@@ -39,7 +42,7 @@ class TSSMCore(nn.Module):
         self.embed_to_deter = nn.Linear(E, D)
         self.drop = nn.Dropout(self.config.embd_pdrop)
         # transformer
-        self.blocks = nn.Sequential(*[Block(self.config) for _ in range(self.config.transf_layers)])
+        self.blocks = nn.Sequential(*[Block(self.config) for _ in range(self.config.n_layer)])
         self.ln_f = nn.LayerNorm(E)
         # prior and posteriors
         self.dstate_to_prior = nn.Sequential(
