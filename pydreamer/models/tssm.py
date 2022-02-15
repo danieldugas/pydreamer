@@ -79,7 +79,7 @@ class TSSMCore(nn.Module):
         zeroth_deter_state = torch.zeros((1, B, D), device=action.device)
         Co, B, E = context_embed.shape
         if Co > self.config.block_size:
-            print("WARNING: context embedding is longer than block size")
+#             print("WARNING: context embedding is longer than block size")
             context_embed = context_embed[-self.config.block_size:, :, :]
             context_action = context_action[-self.config.block_size:, :, :]
             context_reset = context_reset[-self.config.block_size:, :]
