@@ -12,7 +12,7 @@ from pydreamer.models.functions import diag_normal
 DEBUG = True
 
 class TransfConfig:
-    block_size = 64
+    block_size = 32
 
     n_embd = 2048 # the transformer embedding size (not same as embed_dim, the encoder output)
     embd_pdrop = 0.1

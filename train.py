@@ -230,7 +230,7 @@ def run(conf):
                                                 do_image_pred=steps % conf.log_interval >= int(conf.log_interval * 0.9),  # 10% of batches
                                                 do_dream_tensors=steps % conf.logbatch_interval == 1)
                         if conf.keep_state:
-                            states[wid] = new_state
+                            states[wid] = map_structure(new_state, lambda x: x.detach())
 
                 # Backward
 
