@@ -13,6 +13,7 @@ from .encoders import *
 from .decoders import *
 from .rnn import *
 from .rssm import *
+from .tssm import TSSMCore
 from .probes import *
 
 
@@ -221,15 +222,18 @@ class WorldModel(nn.Module):
 
         # RSSM
 
-        self.core = RSSMCore(embed_dim=self.encoder.out_dim,
-                             action_dim=conf.action_dim,
-                             deter_dim=conf.deter_dim,
-                             stoch_dim=conf.stoch_dim,
-                             stoch_discrete=conf.stoch_discrete,
-                             hidden_dim=conf.hidden_dim,
-                             gru_layers=conf.gru_layers,
-                             gru_type=conf.gru_type,
-                             layer_norm=conf.layer_norm)
+        Core = RSSMCore
+        if conf.tssm:
+            Core = TSSMCore
+        self.core = Core(embed_dim=self.encoder.out_dim,
+                         action_dim=conf.action_dim,
+                         deter_dim=conf.deter_dim,
+                         stoch_dim=conf.stoch_dim,
+                         stoch_discrete=conf.stoch_discrete,
+                         hidden_dim=conf.hidden_dim,
+                         gru_layers=conf.gru_layers,
+                         gru_type=conf.gru_type,
+                         layer_norm=conf.layer_norm)
 
         # Init
 

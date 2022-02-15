@@ -1,22 +1,63 @@
-from typing import Any, Optional, Tuple
+from typing import Tuple
 
-import numpy as np
 import torch
-import torch.distributions as D
+import torch.distributions as Distr
 import torch.nn as nn
-import torch.nn.functional as F
 from torch import Tensor
 
-from . import rnn
-from .functions import *
-from .common import *
+from navrep.models.gpt import Block
+
+from .functions import diag_normal
 
 DEBUG = True
 
+class TransfConfig:
+    block_size = 64
+    embd_pdrop = 0.1
+    resid_pdrop = 0.1
+    transf_layers = 2
+    n_embd = 1536
+
 class TSSMCore(nn.Module):
 
-    def __init__(self, embed_dim, action_dim, deter_dim, stoch_dim, stoch_discrete, hidden_dim, gru_layers, gru_type, layer_norm):
+    def __init__(self, embed_dim, action_dim, deter_dim, stoch_dim, stoch_discrete, hidden_dim,
+                 gru_layers, gru_type, layer_norm):
         super().__init__()
+
+        # config
+        self.config = TransfConfig()
+        self.config.deter_dim = deter_dim
+        self.config.action_dim = action_dim
+        self.config.prior_size = stoch_dim * stoch_discrete # 32 variables * 32 categories
+
+        self.embd_pdrop = 0.1
+
+        E = self.config.n_embd
+        D = self.config.deter_dim
+        S = self.config.prior_size
+        self.pos_emb = nn.Parameter(torch.zeros(1, self.config.block_size, E))
+        self.embed_to_deter = nn.Linear(E, D)
+        self.drop = nn.Dropout(self.config.embd_pdrop)
+        # transformer
+        self.blocks = nn.Sequential(*[Block(self.config) for _ in range(self.config.transf_layers)])
+        self.ln_f = nn.LayerNorm(E)
+        # prior and posteriors
+        self.dstate_to_prior = nn.Sequential(
+            nn.Linear(D, D),
+            nn.LayerNorm(D),
+            nn.GELU(),
+            nn.Linear(D, S),
+        )
+        self.dstate_to_mix = nn.Linear(D, D)
+        self.embedding_to_mix = nn.Linear(E, D)
+        self.mix_to_post = nn.Sequential(
+            nn.LayerNorm(D),
+            nn.GELU(),
+            nn.Linear(D, S),
+        )
+        self.sampled_fullstate_to_embed = nn.Linear(
+            D + S, E)
+
         self.cell = self
 
     def forward_prior(self,
@@ -25,9 +66,17 @@ class TSSMCore(nn.Module):
                       in_state: Tuple[Tensor, Tensor, Tensor, Tensor],    # [(BI,D) (BI,S)]
                       ):
         B, A = action.shape[:2]
+        D = self.config.deter_dim
+        S = self.config.prior_size
         context_embed, context_action, context_reset, _ = in_state
         zeroth_deter_state = torch.zeros((1, B, D), device=action.device)
         Co, B, E = context_embed.shape
+        if Co > self.config.block_size:
+            print("WARNING: context embedding is longer than block size")
+            context_embed = context_embed[-self.config.block_size:, :, :]
+            context_action = context_action[-self.config.block_size:, :, :]
+            context_reset = context_reset[-self.config.block_size:, :]
+
         position_embeddings = self.pos_emb[:, :Co, :]  # each position maps to a (learnable) vector
         # forward the GPT model
         full_embeddings = self.drop(
@@ -43,7 +92,7 @@ class TSSMCore(nn.Module):
         # sample from prior
         prior_distr = self.zdistr(prior)
         prior_sample = prior_distr.rsample().view(B, S)
-        rec_embed = self.to_feature(last_deterministic_state, prior_sample) # (B, E)
+        rec_embed = self.to_feature(last_deterministic_state, prior_sample) # actually a prediction (B, E)
 
         uptonow_embed = torch.cat((context_embed, rec_embed.view(1, B, E)), dim=0) # (Co+1, B, E)
         uptonow_action = torch.cat((context_action, action.view(1, B, A)), dim=0) # (Co+1, B, A)
@@ -61,7 +110,7 @@ class TSSMCore(nn.Module):
                 do_open_loop=False,
                 ):
         T, B = embed.shape[:2]
-        I = iwae_samples
+        Iw = iwae_samples
 
         # in state should be the whole sequence otherwise cell.forward_prior doesn't map to anything
         # out state should be the whole sequence ( truncated to max length? )
@@ -71,6 +120,13 @@ class TSSMCore(nn.Module):
         # no sampled state as input, because TSSM doesn't have a way to infer h from z
         context_embed, context_action, context_reset, in_deter_state = in_state
         Co, B, E = context_embed.shape
+        T, B, E = embed.shape
+        T, B, A = action.shape
+        if T > self.config.block_size:
+            raise ValueError("Cannot handle sequence longer than block size")
+
+        S = self.config.prior_size
+        D = self.config.deter_dim
 
         # to give the transformer the ability to use 'previous state', we treat it as a context
         # prepended =  context + sequence
@@ -78,15 +134,25 @@ class TSSMCore(nn.Module):
         prepended_action = torch.cat((context_action, action), 0)
         prepended_reset = torch.cat((context_reset, reset), 0)
         P, _, _ = prepended_embed.shape
+        if P > self.config.block_size:
+            print("WARNING: prepended embedding is longer than block size")
+            prepended_embed = prepended_embed[-self.config.block_size:, :, :]
+            prepended_action = prepended_action[-self.config.block_size:, :, :]
+            prepended_reset = prepended_reset[-self.config.block_size:, :]
+            P, _, _ = prepended_embed.shape
+            Co = P - T
+            in_state = (context_embed[-Co:, :, :],
+                        context_action[-Co:, :, :],
+                        context_reset[-Co:, :],
+                        in_deter_state)
 
         # Multiply batch dimension by I samples
 
         def expand(x):
             # (T,B,X) -> (T,BI,X)
-            return x.unsqueeze(2).expand(T, B, I, -1).reshape(T, B * I, -1)
+            return x.unsqueeze(2).expand(T, B, Iw, -1).reshape(T, B * Iw, -1)
 
         if do_open_loop:
-            embeds = expand(embed).unbind(0)     # (T,B,...) => List[(BI,...)]
             actions = expand(action).unbind(0)
             reset_masks = expand(~reset.unsqueeze(2)).unbind(0)
             priors = []
@@ -110,7 +176,7 @@ class TSSMCore(nn.Module):
             posts = torch.stack(posts)          # (T,BI,2S)
             post_samples = torch.stack(post_samples)      # (T,BI,S)
             deterministic_states = torch.stack(deterministic_states)  # (T,BI,D)
-            rec_embed = self.to_feature(deterministic_states, post_samples)   # (T,BI,D+S)
+            rec_embed = self.to_feature(deterministic_states, post_samples)   # (T,BI,E)
         else: # all time-steps in a single pass (parallel)
             position_embeddings = self.pos_emb[:, :P, :]  # each position maps to a (learnable) vector
             # forward the GPT model
@@ -119,7 +185,8 @@ class TSSMCore(nn.Module):
                 + position_embeddings
             ) # B, P, D
             x = self.blocks(full_embeddings)
-            # the current deterministic state is the 'next deterministic state' predicted from the previous step
+            # the current deterministic state is the 'next deterministic state' predicted from
+            # the previous step
             prepended_next_deterministic_states = self.ln_f(x).moveaxis(0, 1) # (P, B, D)
             next_deterministic_states = prepended_next_deterministic_states[Co:, :, :] # (T, B, D)
             if Co != 0:
@@ -130,14 +197,18 @@ class TSSMCore(nn.Module):
             posts = self.mix_to_post(
                 self.dstate_to_mix(deterministic_states.moveaxis(0, 1).view(B * T, D))
                 + self.embedding_to_mix(full_embeddings.view(B * T, E))
-            ).view(B, T, self.prior_size).moveaxis(0, 1) # (T, B, S)
+            ).view(B, T, S).moveaxis(0, 1) # (T, B, S)
             priors = self.dstate_to_prior(
                 deterministic_states.moveaxis(0, 1).view(B * T, D)
-            ).view(B, T, self.prior_size).moveaxis(0, 1) # (T, B, S)
+            ).view(B, T, S).moveaxis(0, 1) # (T, B, S)
             # sample from posterior
             posterior_distr = self.zdistr(posts)
             post_samples = posterior_distr.rsample().view(T, B, S)
             rec_embed = self.to_feature(deterministic_states, post_samples) # (T, B, E)
+            # We want rec_embed to be the "same" as embed.
+            # Could do this with a loss, but loss is defined outside.
+            # so we sometimes just pass the original embeddings straight through
+            rec_embed = torch.where(torch.rand(embed.shape) > 0.5, embed, rec_embed)
 
         states = []
         for i in range(T):
@@ -149,11 +220,14 @@ class TSSMCore(nn.Module):
             uptonow_reset = prepended_action[:Co+i+1]
             states.append((uptonow_embed, uptonow_action, uptonow_reset, deterministic_states[i]))
 
-        priors = priors.reshape(T, B, I, -1)
-        posts = posts.reshape(T, B, I, -1)  # (T,BI,X) => (T,B,I,X)
-        post_samples = post_samples.reshape(T, B, I, -1)
-        rec_embed = rec_embed.reshape(T, B, I, -1)
-        states = [(e.reshape(T, B, I, E), a.reshape(T, B, I, A), r.reshape(T, B, I), z.reshape(T, B, I, S))
+        priors = priors.reshape(T, B, Iw, -1)
+        posts = posts.reshape(T, B, Iw, -1)  # (T,BI,X) => (T,B,I,X)
+        post_samples = post_samples.reshape(T, B, Iw, -1)
+        rec_embed = rec_embed.reshape(T, B, Iw, -1)
+        states = [(e.reshape(T, B, Iw, E),
+                   a.reshape(T, B, Iw, A),
+                   r.reshape(T, B, Iw),
+                   z.reshape(T, B, Iw, S))
                   for (e, a, r, z) in states]
         out_state = states[-1]
 
@@ -168,6 +242,9 @@ class TSSMCore(nn.Module):
 
     def init_state(self, batch_size):
         B = batch_size
+        E = self.config.n_embd
+        A = self.config.action_dim
+        D = self.config.deter_dim
         uptonow_embed = torch.zeros((0, B, E))
         uptonow_action = torch.zeros((0, B, A))
         uptonow_reset = torch.zeros((0, B))
@@ -185,19 +262,22 @@ class TSSMCore(nn.Module):
 
     def to_feature(self, h: Tensor, z: Tensor) -> Tensor: # either (P, B, E/S) or (B, E/S)
         hz = torch.cat((h, z), -1) # P, B, E+S
-        ES = hz.shape[-1]
-        rec_embed = self.sampled_fullstate_to_embed(hz.view(-1, ES)).view(h.shape) # E = D
+        DS = hz.shape[-1]
+        E = self.config.n_embd
+        rec_embed = self.sampled_fullstate_to_embed(hz.view(-1, DS)).view(h.shape[:-1] + (E,))
         return rec_embed # (P, B, E) or (B, E)
 
     def feature_replace_z(self, features: Tensor, z: Tensor):
         raise NotImplementedError
 
-    def zdistr(self, pp: Tensor) -> D.Distribution:
+    def zdistr(self, pp: Tensor) -> Distr.Distribution:
         # pp = post or prior
         if self.stoch_discrete:
             logits = pp.reshape(pp.shape[:-1] + (self.stoch_dim, self.stoch_discrete))
-            distr = D.OneHotCategoricalStraightThrough(logits=logits.float())  # NOTE: .float() needed to force float32 on AMP
-            distr = D.independent.Independent(distr, 1)  # This makes d.entropy() and d.kl() sum over stoch_dim
+            # NOTE: .float() needed to force float32 on AMP
+            distr = Distr.OneHotCategoricalStraightThrough(logits=logits.float())
+            # This makes d.entropy() and d.kl() sum over stoch_dim
+            distr = Distr.independent.Independent(distr, 1)
             return distr
         else:
             return diag_normal(pp)
