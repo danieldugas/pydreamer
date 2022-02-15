@@ -144,7 +144,7 @@ class TSSMCore(nn.Module):
         prepended_reset = torch.cat((context_reset, reset.view(T, B, 1)), 0)
         P, _, _ = prepended_embed.shape
         if P > self.config.block_size:
-            print("WARNING: prepended embedding is longer than block size")
+#             print("WARNING: prepended embedding is longer than block size")
             prepended_embed = prepended_embed[-self.config.block_size:, :, :]
             prepended_action = prepended_action[-self.config.block_size:, :, :]
             prepended_reset = prepended_reset[-self.config.block_size:, :, :]
