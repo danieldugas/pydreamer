@@ -83,9 +83,12 @@ def main(mlruns_dir="~/aws_mlruns/mlruns",
         )
         outpath = os.path.expanduser(outpath)
 
-        if not dry_run:
-            S.to_csv(outpath)
-        print("{} {} written.".format(outpath, "would have been" if dry_run else ""))
+        if len(S["wall_time"]) == 0:
+            print("EMPTY!")
+        else:
+            if not dry_run:
+                S.to_csv(outpath)
+            print("{} {} written.".format(outpath, "would have been" if dry_run else ""))
 
 
 if __name__ == "__main__":

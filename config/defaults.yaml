@@ -17,6 +17,7 @@ defaults:
   verbose: False
 
   # Features
+  tssm: False
   image_key: image
   image_size: 64
   vecobs_size: 64
