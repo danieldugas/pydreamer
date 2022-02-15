@@ -22,11 +22,10 @@ class Dreamer(nn.Module):
     def __init__(self, conf):
         super().__init__()
 
-        state_dim = conf.deter_dim + conf.stoch_dim * (conf.stoch_discrete or 1)
-
         # World model
 
         self.wm = WorldModel(conf)
+        state_dim = self.wm.features_dim
 
         # Actor critic
 
@@ -124,10 +123,36 @@ class Dreamer(nn.Module):
 
         # Policy
 
-        in_state_dream: StateB = map_structure(states, lambda x: flatten_batch(x.detach())[0])  # type: ignore  # (T,B,I) => (TBI)
-        # Note features_dream includes the starting "real" features at features_dream[0]
-        features_dream, actions_dream, rewards_dream, terminals_dream = \
-            self.dream(in_state_dream, H, self.ac.actor_grad == 'dynamics')  # (H+1,TBI,D)
+        # reshuffles states so that each iteration / example seeds a new dream sequence
+        if self.wm.is_tssm:
+            # we can't reshuffle across the sequence dimension, because states have different shapes
+            # depending on context history. We have to iterate
+            features_dream = []
+            actions_dream = []
+            rewards_dream = []
+            terminals_dream = []
+            for in_state_dream in states:
+                (e, a, r, z) = in_state_dream
+                T = e.shape[0]
+                in_state_dream = (e[:,:,0,:].detach(),
+                                  a[:,:,0,:].detach(),
+                                  r[:,:,0,:].detach(),
+                                  z[:,0,:].detach())
+                feat, act, rew, term = \
+                    self.dream(in_state_dream, H, self.ac.actor_grad == 'dynamics')  # (H+1,BI,D)
+                features_dream.append(feat)
+                actions_dream.append(act)
+                rewards_dream.append(rew)
+                terminals_dream.append(term)
+            features_dream = torch.stack(features_dream, dim=1)  # (H+1,TBI,D)
+            actions_dream = torch.stack(actions_dream, dim=1)  # (H+1,TBI,A)
+            rewards_dream = torch.stack(rewards_dream, dim=1)  # (H+1,TBI)
+            terminals_dream = torch.stack(terminals_dream, dim=1)  # (H+1,TBI)
+        else:
+            in_state_dream: StateB = map_structure(states, lambda x: flatten_batch(x.detach())[0])  # type: ignore  # (T,B,I) => (TBI)
+            # Note features_dream includes the starting "real" features at features_dream[0]
+            features_dream, actions_dream, rewards_dream, terminals_dream = \
+                self.dream(in_state_dream, H, self.ac.actor_grad == 'dynamics')  # (H+1,TBI,D)
         (loss_actor, loss_critic), metrics_ac, tensors_ac = \
             self.ac.training_step(features_dream, actions_dream, rewards_dream, terminals_dream)
         metrics.update(**metrics_ac)
@@ -141,7 +166,12 @@ class Dreamer(nn.Module):
                 # The reason we don't just take real features_dream is because it's really big (H*T*B*I),
                 # and here for inspection purposes we only dream from first step, so it's (H*B).
                 # Oh, and we set here H=T-1, so we get (T,B), and the dreamed experience aligns with actual.
-                in_state_dream: StateB = map_structure(states, lambda x: x.detach()[0, :, 0])  # type: ignore  # (T,B,I) => (B)
+                if self.wm.is_tssm:
+                    first_state = self.wm.core.first_state(states)
+                    # in_state_dream = first_state
+                    in_state_dream: StateB = map_structure(first_state, lambda x: x.detach())
+                else:
+                    in_state_dream: StateB = map_structure(states, lambda x: x.detach()[0, :, 0])  # type: ignore  # (T,B,I) => (B)
                 features_dream, actions_dream, rewards_dream, terminals_dream = self.dream(in_state_dream, T - 1)  # H = T-1
                 image_dream = self.wm.decoder.image.forward(features_dream)
                 _, _, tensors_ac = self.ac.training_step(features_dream, actions_dream, rewards_dream, terminals_dream, log_only=True)
@@ -163,7 +193,7 @@ class Dreamer(nn.Module):
         self.wm.requires_grad_(False)  # Prevent dynamics gradiens from affecting world model
 
         for i in range(imag_horizon):
-            feature = self.wm.core.to_feature(*state)
+            feature = self.wm.core.state_to_feature(state)
             action_dist = self.ac.forward_actor(feature)
             if dynamics_gradients:
                 action = action_dist.rsample()
@@ -173,9 +203,9 @@ class Dreamer(nn.Module):
             actions.append(action)
             # When using dynamics gradients, this causes gradients in RSSM, which we don't want.
             # This is handled in backprop - the optimizer_model will ignore gradients from loss_actor.
-            _, state = self.wm.core.cell.forward_prior(action, None, state)
+            _, state = self.wm.core.forward_prior(action, None, state)
 
-        feature = self.wm.core.to_feature(*state)
+        feature = self.wm.core.state_to_feature(state)
         features.append(feature)
         features = torch.stack(features)  # (H+1,TBI,D)
         actions = torch.stack(actions)  # (H,TBI,A)
@@ -210,18 +240,19 @@ class WorldModel(nn.Module):
         self.stoch_discrete = conf.stoch_discrete
         self.kl_weight = conf.kl_weight
         self.kl_balance = None if conf.kl_balance == 0.5 else conf.kl_balance
+        self.is_tssm = conf.tssm
 
         # Encoder
-
         self.encoder = MultiEncoder(conf)
 
-        # Decoders
+        self.features_dim = conf.deter_dim + conf.stoch_dim * (conf.stoch_discrete or 1)
+        if conf.tssm:
+            self.features_dim = self.encoder.out_dim
 
-        features_dim = conf.deter_dim + conf.stoch_dim * (conf.stoch_discrete or 1)
-        self.decoder = MultiDecoder(features_dim, conf)
+        # Decoders
+        self.decoder = MultiDecoder(self.features_dim, conf)
 
         # RSSM
-
         Core = RSSMCore
         if conf.tssm:
             Core = TSSMCore
@@ -236,7 +267,6 @@ class WorldModel(nn.Module):
                          layer_norm=conf.layer_norm)
 
         # Init
-
         for m in self.modules():
             init_weights_tf2(m)
 
@@ -326,7 +356,7 @@ class WorldModel(nn.Module):
             with torch.no_grad():
                 prior_samples = self.core.zdistr(prior).sample().reshape(post_samples.shape)
                 deter_states = self.core.states_to_deter(states)
-                features_prior = self.core.to_feature(deter_states, prior_samples)
+                features_prior = self.core.hz_to_feature(deter_states, prior_samples)
                 # Decode from prior
                 _, mets, tens = self.decoder.training_step(features_prior, obs, extra_metrics=True)
                 metrics_logprob = {k.replace('loss_', 'logprob_'): v for k, v in mets.items() if k.startswith('loss_')}

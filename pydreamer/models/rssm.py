@@ -18,6 +18,9 @@ class RSSMCore(nn.Module):
         super().__init__()
         self.cell = RSSMCell(embed_dim, action_dim, deter_dim, stoch_dim, stoch_discrete, hidden_dim, gru_layers, gru_type, layer_norm)
 
+    def forward_prior(self, *args, **kwargs):
+        return self.cell.forward_prior(*args, **kwargs)
+
     def forward(self,
                 embed: Tensor,       # tensor(T, B, E)
                 action: Tensor,      # tensor(T, B, A)
@@ -85,8 +88,17 @@ class RSSMCore(nn.Module):
         (h, z) = states
         return h
 
-    def to_feature(self, h: Tensor, z: Tensor) -> Tensor:
+    def hz_to_feature(self, h: Tensor, z: Tensor) -> Tensor:
         return torch.cat((h, z), -1)
+
+    def state_to_feature(self, state: Tuple[Tensor, Tensor]) -> Tensor:
+        return self.hz_to_feature(*state)
+
+    def first_state(self, hz: Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
+        h, z = hz
+        T, B, I, D = h.shape
+        T, B, I, S = z.shape
+        return (h[0, :, 0, :], z[0, :, 0, :]) # (T, B, I, D/S) -> (B, D/S)
 
     def feature_replace_z(self, features: Tensor, z: Tensor):
         h, _ = features.split([self.cell.deter_dim, z.shape[-1]], -1)
