@@ -81,6 +81,10 @@ class RSSMCore(nn.Module):
     def init_state(self, batch_size):
         return self.cell.init_state(batch_size)
 
+    def states_to_deter(self, states):
+        (h, z) = states
+        return h
+
     def to_feature(self, h: Tensor, z: Tensor) -> Tensor:
         return torch.cat((h, z), -1)
 

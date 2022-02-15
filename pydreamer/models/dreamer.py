@@ -321,7 +321,8 @@ class WorldModel(nn.Module):
         if do_image_pred:
             with torch.no_grad():
                 prior_samples = self.core.zdistr(prior).sample().reshape(post_samples.shape)
-                features_prior = self.core.feature_replace_z(features, prior_samples)
+                deter_states = self.core.states_to_deter(states)
+                features_prior = self.core.to_feature(deter_states, prior_samples)
                 # Decode from prior
                 _, mets, tens = self.decoder.training_step(features_prior, obs, extra_metrics=True)
                 metrics_logprob = {k.replace('loss_', 'logprob_'): v for k, v in mets.items() if k.startswith('loss_')}

@@ -68,8 +68,8 @@ def run(conf):
     if conf.resume_id is None:
 #         run_id = "f3f47a18b9334a4baa97c728143a00c6" # "./alternate.x86_64"
 #         run_id = "0657e4d7a0f14c6ea301017f6774402b" # "./alternate.x86_64"
-#         run_id = "a1ec5269279f46f79af2884526590592" # "staticasl" (fixed)
-        run_id = "3aaa8d09bce64dd888240a04b714aec7" # "kozehd" (kozehdrs)
+        run_id = "a1ec5269279f46f79af2884526590592" # "staticasl" (fixed)
+#         run_id = "3aaa8d09bce64dd888240a04b714aec7" # "kozehd" (kozehdrs)
     print("run_id: " + run_id)
 
     optimizers = model.init_optimizers(conf.adam_lr, conf.adam_lr_actor, conf.adam_lr_critic, conf.adam_eps)
@@ -79,9 +79,10 @@ def run(conf):
     last_action = np.array([1, 0, 0])
 
 #     build_name = "./alternate.x86_64"
-    build_name = "kozehd"
+#     build_name = "kozehd"
+    build_name = "staticasl"
 #     difficulty_mode = "progressive"
-    difficulty_mode = "easiest"
+    difficulty_mode = "medium"
     env = NavRep3DAnyEnvDiscrete(build_name=build_name,
                                  debug_export_every_n_episodes=0,
                                  difficulty_mode=difficulty_mode)
