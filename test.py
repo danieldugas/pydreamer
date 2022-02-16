@@ -47,8 +47,8 @@ def main(gpu=False, build_name="./alternate.x86_64", render=True, difficulty_mod
         run_id = "0657e4d7a0f14c6ea301017f6774402b" # "./alternate.x86_64"
 #         run_id = "a1ec5269279f46f79af2884526590592" # "staticasl" (staticaslfixed)
 #         run_id = "3aaa8d09bce64dd888240a04b714aec7" # "kozehd" (kozehdrs)
-    print("Selecting run_id: " + run_id)
 
+    print("Selecting run_id: " + run_id)
     runs = find_runs()
     found = False
     for run, rundir, run_env, run_len in runs:
@@ -130,6 +130,8 @@ def main(gpu=False, build_name="./alternate.x86_64", render=True, difficulty_mod
     make_dir_if_not_exists(os.path.dirname(SAVEPATH))
     np.savez(SAVEPATH, successes=np.array(successes), difficulties=np.array(difficulties))
     print("Saved to {}".format(SAVEPATH))
+
+    env.close()
 
 
 if __name__ == '__main__':
