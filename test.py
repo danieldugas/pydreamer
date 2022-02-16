@@ -1,88 +1,74 @@
-import argparse
-import logging
-import logging.config
 import os
-import sys
-import time
+import argparse
 from tqdm import tqdm
-from collections import defaultdict
-from datetime import datetime
-from itertools import chain
-from logging import critical, debug, error, info, warning
-from multiprocessing import Process
-from pathlib import Path
-from typing import Iterator, Optional
-
-import mlflow
+from strictfire import StrictFire
+from pyniel.python_tools.path_tools import make_dir_if_not_exists
 import numpy as np
-import scipy.special
 import torch
-import torch.distributions as D
-import torch.nn as nn
-from torch import Tensor, tensor
-from torch.cuda.amp import GradScaler, autocast
-from torch.profiler import ProfilerActivity
-from torch.utils.data import DataLoader
+from navrep3d.navrep3danyenv import NavRep3DAnyEnvDiscrete
 
-import generator
 from pydreamer.preprocessing import to_image
 from pydreamer import tools
-from pydreamer.data import DataSequential, MlflowEpisodeRepository
-from pydreamer.models import *
-from pydreamer.models.functions import map_structure, nanmean
-from pydreamer.preprocessing import Preprocessor, WorkerInfoPreprocess
-from pydreamer.tools import *
+from pydreamer.models import Dreamer
 
-from navrep3d.navrep3danyenv import NavRep3DAnyEnvDiscrete
+from convert_dreamer_metrics_to_n3d import find_runs
 
 torch.distributions.Distribution.set_default_validate_args(False)
 torch.backends.cudnn.benchmark = True  # type: ignore
 
+def main(gpu=False, build_name="./alternate.x86_64", render=True, difficulty_mode="medium",
+         run_id=None, n_episodes=1000):
+    # Config from YAML
+    conf = {}
+    configs = tools.read_yamls('./config')
+    confnames = ["defaults", "navrep3dtrain"]
+    for name in confnames:
+        conf.update(configs[name])
+    # Dict to namepsace
+    parser = argparse.ArgumentParser()
+    for key, value in conf.items():
+        parser.add_argument(f'--{key}', type=type(value) if value is not None else str, default=value)
+    conf = parser.parse_args([])
 
-def run(conf):
-#     mlflow_start_or_resume(conf.run_name or conf.resume_id, conf.resume_id)
-#     try:
-#         mlflow.log_params({k: v for k, v in vars(conf).items() if not len(repr(v)) > 250})  # filter too long
-#     except Exception as e:
-#         # This happens when resuming and config has different parameters - it's fine
-#         error(f'ERROR in mlflow.log_params: {repr(e)}')
-
-    device = torch.device(conf.device)
-    device = torch.device('cpu')
-
-    # MODEL
+    if gpu:
+        device = torch.device("cuda:0")
+    else:
+        device = torch.device('cpu')
 
     if conf.model == 'dreamer':
         model = Dreamer(conf)
     else:
         assert False, conf.model
     model.to(device)
-
     print(model)
 
-    # Training
-
-    print(conf.run_name)
-    print(conf.resume_id)
-    run_id = conf.resume_id
-    if conf.resume_id is None:
+    if run_id is None:
 #         run_id = "f3f47a18b9334a4baa97c728143a00c6" # "./alternate.x86_64"
-#         run_id = "0657e4d7a0f14c6ea301017f6774402b" # "./alternate.x86_64"
-        run_id = "a1ec5269279f46f79af2884526590592" # "staticasl" (fixed)
+        run_id = "0657e4d7a0f14c6ea301017f6774402b" # "./alternate.x86_64"
+#         run_id = "a1ec5269279f46f79af2884526590592" # "staticasl" (staticaslfixed)
 #         run_id = "3aaa8d09bce64dd888240a04b714aec7" # "kozehd" (kozehdrs)
-    print("run_id: " + run_id)
+    print("Selecting run_id: " + run_id)
+
+    runs = find_runs()
+    found = False
+    for run, rundir, run_env, run_len in runs:
+        if run_id == run:
+            found = True
+            break
+    assert found, f"Run {run_id} not found"
 
     optimizers = model.init_optimizers(conf.adam_lr, conf.adam_lr_actor, conf.adam_lr_critic, conf.adam_eps)
-    resume_step = tools.mlflow_load_checkpoint(model, optimizers, map_location=device, run_id=run_id)
-    info(f'Loaded model from checkpoint epoch {resume_step}')
+#     resume_step = tools.mlflow_load_checkpoint(model, optimizers, map_location=device, run_id=run_id)
+    modelpath = os.path.join(rundir, "artifacts/checkpoints/latest.pt")
+    checkpoint = torch.load(modelpath, map_location=device)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    for i, opt in enumerate(optimizers):
+        opt.load_state_dict(checkpoint[f'optimizer_{i}_state_dict'])
+    resume_step = checkpoint['epoch']
+    print(f'Loaded model from checkpoint epoch {resume_step}')
 
     last_action = np.array([1, 0, 0])
 
-#     build_name = "./alternate.x86_64"
-#     build_name = "kozehd"
-    build_name = "staticasl"
-#     difficulty_mode = "progressive"
-    difficulty_mode = "medium"
     env = NavRep3DAnyEnvDiscrete(build_name=build_name,
                                  debug_export_every_n_episodes=0,
                                  difficulty_mode=difficulty_mode)
@@ -95,10 +81,9 @@ def run(conf):
     T = 1
     B = 1
 
-    render = True
     successes = []
-    N = 1000
-    pbar = tqdm(range(N))
+    difficulties = []
+    pbar = tqdm(range(n_episodes))
     for i in pbar:
         (img, vecobs) = env.reset() # ((64, 64, 3) [0-255], (5,) [-inf, inf])
         rnn_state = model.init_state(B)
@@ -132,30 +117,20 @@ def run(conf):
                     if render:
                         print("Failure.")
                     successes.append(0.)
-                pbar.set_description(f"Success rate: {sum(successes)/len(successes):.2f}")
+                difficulty = inf["episode_scenario"]
+                difficulties.append(difficulty)
+                pbar.set_description("Success rate: {:.2f}, avg dif: {:.2f}".format(
+                    sum(successes)/len(successes), np.mean(difficulties)))
                 break
+
+    bname = build_name.replace(".x86_64", "").replace("./", "")
+    SAVEPATH = "~/navrep3d/test/{}_{}_DREAMER".format(run_env, run_id) + "_{}_{}_{}.npz".format(
+        bname, difficulty_mode, n_episodes)
+    SAVEPATH = os.path.expanduser(SAVEPATH)
+    make_dir_if_not_exists(os.path.dirname(SAVEPATH))
+    np.savez(SAVEPATH, successes=np.array(successes), difficulties=np.array(difficulties))
+    print("Saved to {}".format(SAVEPATH))
 
 
 if __name__ == '__main__':
-    configure_logging(prefix='[TRAIN]')
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--configs', nargs='+', required=True)
-    args, remaining = parser.parse_known_args()
-
-    # Config from YAML
-    conf = {}
-    configs = tools.read_yamls('./config')
-    for name in args.configs:
-        if ',' in name:
-            for n in name.split(','):
-                conf.update(configs[n])
-        else:
-            conf.update(configs[name])
-
-    # Override config from command-line
-    parser = argparse.ArgumentParser()
-    for key, value in conf.items():
-        parser.add_argument(f'--{key}', type=type(value) if value is not None else str, default=value)
-    conf = parser.parse_args(remaining)
-
-    run(conf)
+    StrictFire(main)

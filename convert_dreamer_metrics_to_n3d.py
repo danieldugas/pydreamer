@@ -4,10 +4,7 @@ import numpy as np
 import pandas as pd
 from strictfire import StrictFire
 
-def main(mlruns_dir="~/aws_mlruns/mlruns",
-         dry_run=False,
-         ):
-
+def find_runs(mlruns_dir="~/aws_mlruns/mlruns"):
     mlruns_dir = os.path.expanduser(mlruns_dir)
     runs_parent = os.path.join(mlruns_dir, "0")
     maybe_runs = os.listdir(runs_parent)
@@ -18,15 +15,27 @@ def main(mlruns_dir="~/aws_mlruns/mlruns",
         if not os.path.isdir(rundir):
             continue
         logpath = os.path.join(rundir, "metrics/agent/scenario")
+        envidpath = os.path.join(rundir, "params/env_id")
+        # test that run is loadable
         S = pd.read_csv(logpath, sep=" ", names=["wall_time", "num_walls", "total_steps"])
-        runs.append(run)
+        run_len = len(S["num_walls"])
+        env_id_df = pd.read_csv(envidpath)
+        env_id = env_id_df.columns[0]
+        runs.append((run, rundir, env_id, run_len))
 
     print("Found {} runs:".format(len(runs)))
-    for run in runs:
-        print(run)
+    for run, rundir, env_id, run_len in runs:
+        print((run, env_id, run_len))
 
-    for run in runs:
-        rundir = os.path.join(runs_parent, run)
+    return runs
+
+def main(mlruns_dir="~/aws_mlruns/mlruns",
+         dry_run=False,
+         ):
+
+    runs = find_runs(mlruns_dir=mlruns_dir)
+
+    for run, rundir, env_id, run_len in runs:
         if not os.path.isdir(rundir):
             continue
         logpath = os.path.join(rundir, "metrics/agent/scenario")
@@ -38,20 +47,19 @@ def main(mlruns_dir="~/aws_mlruns/mlruns",
         env_id_df = pd.read_csv(envidpath)
         env_id = env_id_df.columns[0]
         if env_id == "NavRep3DStaticASLEnv":
-            envname="navrep3daslfixedenv"
-            scenario="navrep3dasl"
+            envname = "navrep3daslfixedenv"
+            scenario = "navrep3dasl"
         elif env_id == "NavRep3DKozeHDEnv":
-            envname="navrep3dkozehdrenv"
-            scenario="navrep3dkozehd"
+            envname = "navrep3dkozehdrenv"
+            scenario = "navrep3dkozehd"
         elif env_id == "NavRep3DKozeHDRSEnv":
-            envname="navrep3dkozehdrsenv"
-            scenario="navrep3dkozehd"
+            envname = "navrep3dkozehdrsenv"
+            scenario = "navrep3dkozehd"
         elif env_id == "NavRep3DTrainEnv":
-            envname="navrep3daltenv"
-            scenario="navrep3dalt"
+            envname = "navrep3daltenv"
+            scenario = "navrep3dalt"
         else:
             raise NotImplementedError
-
 
         S = pd.read_csv(logpath, sep=" ", names=["wall_time", "num_walls", "total_steps"])
         S["scenario"] = scenario

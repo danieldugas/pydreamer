@@ -133,6 +133,7 @@ class Dreamer(nn.Module):
             terminals_dream = []
             for in_state_dream in states:
                 (e, a, r, z) = in_state_dream
+                # we don't support I > 1 yet
                 in_state_dream = (e[:,:,0,:].detach(),
                                   a[:,:,0,:].detach(),
                                   r[:,:,0,:].detach(),

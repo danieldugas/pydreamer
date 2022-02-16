@@ -63,7 +63,7 @@ class RSSMCore(nn.Module):
         states_h = torch.stack(states_h)    # (T,BI,D)
         samples = torch.stack(samples)      # (T,BI,S)
         priors = self.cell.batch_prior(states_h)  # (T,BI,2S)
-        features = self.to_feature(states_h, samples)   # (T,BI,D+S)
+        features = self.hz_to_feature(states_h, samples)   # (T,BI,D+S)
 
         posts = posts.reshape(T, B, I, -1)  # (T,BI,X) => (T,B,I,X)
         states_h = states_h.reshape(T, B, I, -1)
@@ -102,7 +102,7 @@ class RSSMCore(nn.Module):
 
     def feature_replace_z(self, features: Tensor, z: Tensor):
         h, _ = features.split([self.cell.deter_dim, z.shape[-1]], -1)
-        return self.to_feature(h, z)
+        return self.hz_to_feature(h, z)
 
     def zdistr(self, pp: Tensor) -> D.Distribution:
         return self.cell.zdistr(pp)
