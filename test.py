@@ -83,10 +83,13 @@ def main(gpu=False, build_name="./alternate.x86_64", render=True, difficulty_mod
 
     successes = []
     difficulties = []
+    lengths = []
+    causes = []
     pbar = tqdm(range(n_episodes))
     for i in pbar:
         (img, vecobs) = env.reset() # ((64, 64, 3) [0-255], (5,) [-inf, inf])
         rnn_state = model.init_state(B)
+        steps = 0
         while True:
             obs = {}
             obs["action"] = torch.tensor(last_action, dtype=torch.float).view((T, B, A))
@@ -105,6 +108,7 @@ def main(gpu=False, build_name="./alternate.x86_64", render=True, difficulty_mod
             last_action[deter_action] = 1
 
             (img, vecobs), reward, done, inf = env.step(deter_action)
+            steps += 1
 
             if render:
                 env.render(save_to_file=True)
@@ -119,6 +123,8 @@ def main(gpu=False, build_name="./alternate.x86_64", render=True, difficulty_mod
                     successes.append(0.)
                 difficulty = inf["episode_scenario"]
                 difficulties.append(difficulty)
+                lengths.append(steps)
+                causes.append(str(inf["event"]))
                 pbar.set_description("Success rate: {:.2f}, avg dif: {:.2f}".format(
                     sum(successes)/len(successes), np.mean(difficulties)))
                 break
@@ -128,7 +134,11 @@ def main(gpu=False, build_name="./alternate.x86_64", render=True, difficulty_mod
         bname, difficulty_mode, n_episodes)
     SAVEPATH = os.path.expanduser(SAVEPATH)
     make_dir_if_not_exists(os.path.dirname(SAVEPATH))
-    np.savez(SAVEPATH, successes=np.array(successes), difficulties=np.array(difficulties))
+    np.savez(SAVEPATH,
+             successes=np.array(successes),
+             difficulties=np.array(difficulties),
+             lengths=np.array(lengths),
+             causes=np.array(causes))
     print("Saved to {}".format(SAVEPATH))
 
     env.close()
