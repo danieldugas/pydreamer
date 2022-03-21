@@ -66,15 +66,15 @@ def create_env(env_id: str, no_terminal: bool, env_time_limit: int, env_action_r
         env = DMC(env_id.split('-')[1].lower(), action_repeat=env_action_repeat)
 
     elif env_id == ("NavRep3DTrainEnv"):
-        from navrep3d.navrep3dtrainenv import NavRep3DTrainEnvDiscrete
+        from navdreams.navrep3dtrainenv import NavRep3DTrainEnvDiscrete
         env = DictWrapper(NavRep3DTrainEnvDiscrete(build_name="./alternate.x86_64"))
 
     elif env_id == ("NavRep3DStaticASLEnv"):
-        from navrep3d.mlagents_gym_wrapper import NavRep3DStaticASLEnvDiscrete
+        from navdreams.mlagents_gym_wrapper import NavRep3DStaticASLEnvDiscrete
         env = DictWrapper(NavRep3DStaticASLEnvDiscrete())
 
     elif env_id == ("NavRep3DKozeHDRSEnv"):
-        from navrep3d.mlagents_gym_wrapper import NavRep3DStaticASLEnvDiscrete
+        from navdreams.mlagents_gym_wrapper import NavRep3DStaticASLEnvDiscrete
         env = DictWrapper(NavRep3DStaticASLEnvDiscrete(build_name="kozehd"))
 
     else:

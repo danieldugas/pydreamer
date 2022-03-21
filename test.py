@@ -5,7 +5,7 @@ from strictfire import StrictFire
 from pyniel.python_tools.path_tools import make_dir_if_not_exists
 import numpy as np
 import torch
-from navrep3d.navrep3danyenv import NavRep3DAnyEnvDiscrete
+from navdreams.navrep3danyenv import NavRep3DAnyEnvDiscrete
 
 from pydreamer.preprocessing import to_image
 from pydreamer import tools
@@ -130,7 +130,7 @@ def main(gpu=False, build_name="./alternate.x86_64", render=True, difficulty_mod
                 break
 
     bname = build_name.replace(".x86_64", "").replace("./", "")
-    SAVEPATH = "~/navrep3d/test/{}_{}_DREAMER".format(run_env, run_id) + "_{}_{}_{}.npz".format(
+    SAVEPATH = "~/navdreams_data/results/test/{}_{}_DREAMER".format(run_env, run_id) + "_{}_{}_{}.npz".format(
         bname, difficulty_mode, n_episodes)
     SAVEPATH = os.path.expanduser(SAVEPATH)
     make_dir_if_not_exists(os.path.dirname(SAVEPATH))

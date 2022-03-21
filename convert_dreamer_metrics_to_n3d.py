@@ -86,7 +86,7 @@ def main(mlruns_dir="~/aws_mlruns/mlruns",
         # fix log start time
         start_time = S["wall_time"][0]
         time_string = time.strftime('%Y_%m_%d__%H_%M_%S', time.localtime(start_time))
-        outpath = "~/navrep3d/logs/gym/{}_{}_DISCRETE_DREAMER_E2E_VCARCH_C1024.csv".format(
+        outpath = "~/navdreams_data/results/logs/gym/{}_{}_DISCRETE_DREAMER_E2E_VCARCH_C1024.csv".format(
             envname, time_string
         )
         outpath = os.path.expanduser(outpath)

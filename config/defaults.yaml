@@ -203,7 +203,7 @@ debug:
   batch_size: 5
   imag_horizon: 3
 
-navrep3dtrain:
+navdreams_simple:
   buffer_size: 10_000_000 # only affects disk space, not RAM
   vecobs_size: 5
   n_steps: 99_000_000
@@ -215,7 +215,7 @@ navrep3dtrain:
   generator_prefill_steps: 50_000
   data_workers: 1 # RAM critical
 
-navrep3dstaticasl:
+navdreams_modern:
   buffer_size: 10_000_000 # only affects disk space, not RAM
   vecobs_size: 5
   n_steps: 99_000_000
@@ -228,7 +228,7 @@ navrep3dstaticasl:
   generator_prefill_steps: 50_000
   data_workers: 1 # RAM critical
 
-navrep3dkozehd:
+navdreams_replica:
   buffer_size: 10_000_000 # only affects disk space, not RAM
   vecobs_size: 5
   n_steps: 99_000_000
