@@ -15,9 +15,9 @@ class TransfConfig:
     block_size = 32
 
     n_embd = 2048 # the transformer embedding size (not same as embed_dim, the encoder output)
-    embd_pdrop = 0.1
-    resid_pdrop = 0.1
-    attn_pdrop = 0.1
+    embd_pdrop = 0.0 # NOCOMMIT
+    resid_pdrop = 0.0 # NOCOMMIT # Testing hypothesis that AMP is failing with dropout (NaNs)
+    attn_pdrop = 0.0 # NOCOMMIT
     n_layer = 8
     n_head = 8
 
@@ -98,6 +98,8 @@ class TSSMCore(nn.Module):
         last_deterministic_state = deterministic_states[-1] # (B, D)
         B, D = last_deterministic_state.shape
         prior = self.dstate_to_prior(last_deterministic_state)# (B, S)
+        if torch.isnan(prior).any():
+            raise ValueError("NaNs in prior!")
         # sample from prior
         prior_distr = self.zdistr(prior)
         prior_sample = prior_distr.rsample().view(B, S)
@@ -193,7 +195,7 @@ class TSSMCore(nn.Module):
                 self.embed_to_deter(prepended_embed.moveaxis(0, 1).reshape(B * P, E)).reshape(B, P, D)
                 + position_embeddings
             ) # B, P, D
-            x = self.blocks(full_embeddings)
+            x = self.blocks(full_embeddings.float())
             # the current deterministic state is the 'next deterministic state' predicted from
             # the previous step
             prepended_next_deterministic_states = self.ln_f(x).moveaxis(0, 1) # (P, B, D)
@@ -211,6 +213,8 @@ class TSSMCore(nn.Module):
                 deterministic_states.moveaxis(0, 1).reshape(B * T, D)
             ).view(B, T, S).moveaxis(0, 1) # (T, B, S)
             # sample from posterior
+            if torch.isnan(posts).any():
+                raise ValueError("NaNs in post!")
             posterior_distr = self.zdistr(posts)
             post_samples = posterior_distr.rsample().view(T, B, S)
             rec_embed = self.hz_to_feature(deterministic_states, post_samples) # (T, B, E)

@@ -202,6 +202,8 @@ def run(conf):
                                 pin_memory=True))
 
     scaler = GradScaler(enabled=conf.amp)
+    
+    torch.autograd.set_detect_anomaly(True)
 
     with get_profiler(conf) as profiler:
         while True:

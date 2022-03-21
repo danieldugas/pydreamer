@@ -42,6 +42,8 @@ class ActorCritic(nn.Module):
 
     def forward_actor(self, features: Tensor) -> D.Distribution:
         y = self.actor.forward(features).float()  # .float() to force float32 on AMP
+        if torch.isnan(y).any():
+            raise ValueError("nans detected")
 
         if self.actor_dist == 'onehot':
             return D.OneHotCategorical(logits=y)

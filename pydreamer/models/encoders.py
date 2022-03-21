@@ -47,6 +47,8 @@ class MultiEncoder(nn.Module):
         embed = self.encoder_image.forward(image)  # (T,B,E)
         embed_vecobs = self.encoder_vecobs(obs['vecobs'])
         embed = torch.cat((embed, embed_vecobs), dim=-1)  # (T,B,E+256)
+        if torch.isnan(embed).any():
+            raise ValueError
         return embed
 
 

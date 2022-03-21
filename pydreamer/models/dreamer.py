@@ -137,6 +137,8 @@ class Dreamer(nn.Module):
                                   a[:,:,0,:].detach(),
                                   r[:,:,0,:].detach(),
                                   z[:,0,:].detach())
+                if torch.isnan(in_state_dream[3]).any():
+                    raise ValueError('NaN in state')
                 feat, act, rew, term = \
                     self.dream(in_state_dream, H, self.ac.actor_grad == 'dynamics')  # (H+1,BI,D)
                 features_dream.append(feat)
