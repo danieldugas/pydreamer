@@ -203,7 +203,7 @@ def run(conf):
 
     scaler = GradScaler(enabled=conf.amp)
     
-    torch.autograd.set_detect_anomaly(True)
+#     torch.autograd.set_detect_anomaly(True)
 
     with get_profiler(conf) as profiler:
         while True:
